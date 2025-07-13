@@ -3,3 +3,4 @@ pandas
 plotly
 sqlalchemy
 networkx 
+pygraphviz==1.13
