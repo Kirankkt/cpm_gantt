@@ -4,6 +4,8 @@ from gantt_chart import create_gantt_chart
 from database import get_project_data_from_db, save_project_data_to_db
 from cpm_logic import calculate_cpm
 from utils import get_sample_data
+from network_diagram import create_network_figure
+
 
 
 def show_project_view(project_id: int = 1) -> None:
@@ -61,6 +63,13 @@ def show_project_view(project_id: int = 1) -> None:
         st.subheader("2. CPM Results")
         st.dataframe(cpm_df, use_container_width=True)
 
-        st.subheader("3. Project Gantt Chart")
+        st.subheader("3. CPM Network Diagram")
+        net_fig = create_network_figure(cpm_df)
+        st.plotly_chart(net_fig, use_container_width=True)
+
+        st.subheader("4. Project Gantt Chart")
         fig = create_gantt_chart(cpm_df, start_date=start_date)
         st.plotly_chart(fig, use_container_width=True)
+
+        
+
