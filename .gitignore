@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VSCode settings
+.vscode/
+
+# Environment files
+.env
+.venv/
+*.env
+*.venv
+*.egg-info/
+
+# Database files
+*.db
+*.sqlite3
+
+# Streamlit cache (optional if using Streamlit)
+.streamlit/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
