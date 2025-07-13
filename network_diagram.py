@@ -1,9 +1,10 @@
 """
-Light-weight CPM network diagram (no pygraphviz needed)
+Activity-on-Node (AoN) CPM network – clean left→right layout
 
-• x = Early-Start layer  → clear left→right time flow
-• y = automatic “lane” assignment to avoid overlap
-• Critical-path edges drawn in red
+• Adds dummy “Start” and “End” nodes
+• x-position  = Early Start * x_gap  (so it flows in time order)
+• y-position  = lane number (top-down)  – no zig-zag
+• Critical-path edges drawn bold red
 """
 
 import networkx as nx
@@ -11,10 +12,68 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
-# ------------------------------------------------------------------ #
-#  1. Helpers                                                        #
-# ------------------------------------------------------------------ #
-def build_network(df: pd.DataFrame) -> nx.DiGraph:
+def _add_start_end(df: pd.DataFrame) -> pd.DataFrame:
+    """Return a copy of df with START/END rows inserted."""
+    df2 = df.copy()
+    first_es = df2["ES"].min()
+    last_ef  = df2["EF"].max()
+
+    start_row = {
+        "Task ID":      "START",
+        "Task Description": "Start",
+        "Predecessors": "",
+        "Duration":     0,
+        "ES":           first_es - 1,
+        "EF":           first_es - 1,
+        "LS":           first_es - 1,
+        "LF":           first_es - 1,
+        "Float":        0,
+        "On Critical Path?": "Yes",
+    }
+    end_row = start_row | {
+        "Task ID":      "END",
+        "Task Description": "End",
+        "ES":           last_ef + 1,
+        "EF":           last_ef + 1,
+    }
+    df2 = pd.concat([pd.DataFrame([start_row]), df2, pd.DataFrame([end_row])],
+                    ignore_index=True)
+    # wire predecessors
+    df2.loc[df2["Task ID"] == "START", "Predecessors"] = ""
+    df2.loc[df2["Task ID"] == "END",   "Predecessors"] = ",".join(
+        df.query("EF == @last_ef")["Task ID"]
+    )
+    return df2
+
+
+def _lane_positions(df: pd.DataFrame,
+                    x_gap: float = 1.4,
+                    y_gap: float = 1.1):
+    """
+    Deterministic position: x = ES * x_gap ; y = first free lane.
+    """
+    lanes_right_edge: list[float] = []
+    pos = {}
+
+    df = df.sort_values(["ES", "Task ID"])
+    for _, row in df.iterrows():
+        x = row["ES"] * x_gap
+        duration = max(1, row["Duration"]) * x_gap
+        # find vacant lane
+        for lane, rightmost in enumerate(lanes_right_edge):
+            if rightmost < x:
+                break
+        else:
+            lane = len(lanes_right_edge)
+            lanes_right_edge.append(0)
+
+        lanes_right_edge[lane] = x + duration
+        y = -lane * y_gap
+        pos[row["Task ID"]] = (x, y)
+    return pos
+
+
+def _build_graph(df: pd.DataFrame) -> nx.DiGraph:
     g = nx.DiGraph()
     for _, r in df.iterrows():
         g.add_node(r["Task ID"], label=r["Task Description"])
@@ -25,89 +84,50 @@ def build_network(df: pd.DataFrame) -> nx.DiGraph:
     return g
 
 
-def layered_positions(
-    df: pd.DataFrame,
-    x_gap: float = 1.4,
-    y_gap: float = 1.0,
-) -> dict[str, tuple[float, float]]:
-    """
-    Deterministic left→right layout:
-      x = ES * x_gap
-      y = first free lane (stacked) * -y_gap
-    """
-    df = df.sort_values(["ES", "Task ID"])
-    lane_rightmost_x: list[float] = []
-    pos = {}
-
-    for _, r in df.iterrows():
-        x = r["ES"] * x_gap
-        dur_width = r["Duration"] * x_gap
-        # find topmost lane that is free at this x
-        for lane, right_x in enumerate(lane_rightmost_x):
-            if right_x < x:
-                break
-        else:
-            lane = len(lane_rightmost_x)
-            lane_rightmost_x.append(0)
-
-        lane_rightmost_x[lane] = x + dur_width
-        # slight jitter to reduce perfectly straight overlaps
-        jitter = (hash(r["Task ID"]) % 7) * 0.07
-        y = -(lane * y_gap + jitter)
-        pos[r["Task ID"]] = (x, y)
-
-    return pos
-
-
-# ------------------------------------------------------------------ #
-#  2. Public figure builder                                          #
-# ------------------------------------------------------------------ #
 def create_network_figure(df: pd.DataFrame) -> go.Figure:
-    g   = build_network(df)
-    pos = layered_positions(df)
+    df_net = _add_start_end(df)
+    g      = _build_graph(df_net)
+    pos    = _lane_positions(df_net)
 
-    # Critical-path set
-    crit_tasks = set(df.loc[df["On Critical Path?"] == "Yes", "Task ID"])
+    crit   = set(df_net.loc[df_net["On Critical Path?"] == "Yes", "Task ID"])
 
-    # Edges
-    edge_x, edge_y, edge_col, edge_w = [], [], [], []
+    # edges
+    edge_x, edge_y, edge_c, edge_w = [], [], [], []
     for u, v in g.edges():
         x0, y0 = pos[u]
         x1, y1 = pos[v]
         edge_x += [x0, x1, None]
         edge_y += [y0, y1, None]
-        is_crit = u in crit_tasks and v in crit_tasks
-        edge_col.append("red" if is_crit else "#888")
+        is_crit = u in crit and v in crit
+        edge_c.append("red" if is_crit else "#999")
         edge_w.append(3 if is_crit else 1)
 
     edge_trace = go.Scatter(
         x=edge_x,
         y=edge_y,
         mode="lines",
-        line=dict(color="#888", width=1),
+        line=dict(width=1, color="#999"),
         hoverinfo="none",
     )
-    # Width & color arrays can't be set per-segment in one trace,
-    # but redrawing critical edges in an overlay trace works:
-    if any(c == "red" for c in edge_col):
-        crit_x = [x for x, c in zip(edge_x, edge_col) if c == "red"] + [None]
-        crit_y = [y for y, c in zip(edge_y, edge_col) if c == "red"] + [None]
+    if any(c == "red" for c in edge_c):
+        crit_x = [x for x, c in zip(edge_x, edge_c) if c == "red"] + [None]
+        crit_y = [y for y, c in zip(edge_y, edge_c) if c == "red"] + [None]
         crit_trace = go.Scatter(
             x=crit_x, y=crit_y,
             mode="lines",
-            line=dict(color="red", width=3),
+            line=dict(width=3, color="red"),
             hoverinfo="none",
         )
     else:
         crit_trace = None
 
-    # Nodes
-    node_x, node_y, hover = [], [], []
+    # nodes
+    node_x, node_y, hover, colors = [], [], [], []
     for n in g.nodes():
         x, y = pos[n]
-        node_x.append(x)
-        node_y.append(y)
-        hover.append(f"{n}: {g.nodes[n]['label']}")
+        node_x.append(x); node_y.append(y)
+        hover.append(g.nodes[n]["label"])
+        colors.append("#000000" if n in ("START", "END") else "#0047AB")
 
     node_trace = go.Scatter(
         x=node_x,
@@ -115,21 +135,19 @@ def create_network_figure(df: pd.DataFrame) -> go.Figure:
         mode="markers+text",
         text=list(g.nodes()),
         textposition="bottom center",
-        marker=dict(size=10, color="#0047AB"),
+        marker=dict(size=12, color=colors),
         hovertext=hover,
         hoverinfo="text",
     )
 
-    data = [edge_trace, node_trace]
-    if crit_trace:
-        data.insert(1, crit_trace)
+    data = [edge_trace, node_trace] if crit_trace is None else [edge_trace, crit_trace, node_trace]
 
-    fig = go.Figure(data=data)
+    fig = go.Figure(data)
     fig.update_layout(
         title="CPM Network Diagram",
-        showlegend=False,
         margin=dict(l=20, r=20, t=40, b=40),
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+        showlegend=False,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
     )
     return fig
