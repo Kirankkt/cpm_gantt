@@ -19,6 +19,10 @@ Start the Streamlit application with:
 streamlit run app.py
 ```
 
+You can change where the SQLite database is stored by setting the
+`DATABASE_PATH` environment variable before starting the app. By default the
+file `projects.db` will be created in the project directory.
+
 The web interface lets you enter tasks, durations and dependencies directly in your browser. You can also import a CSV file with the task list or export results after calculation.
 
 ## Features

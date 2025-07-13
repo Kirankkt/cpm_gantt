@@ -1,8 +1,9 @@
+import os
 import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 
 # --- DATABASE SETUP ---
-DB_FILE = "projects.db"
+DB_FILE = os.environ.get("DATABASE_PATH", "projects.db")
 engine = create_engine(f"sqlite:///{DB_FILE}")
 
 def initialize_database():
