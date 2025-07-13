@@ -2,13 +2,18 @@
 import plotly.express as px
 import pandas as pd
 
-def create_gantt_chart(df):
+def create_gantt_chart(df, start_date="2025-01-01"):
+    """Create an interactive Gantt chart using Plotly.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        DataFrame containing CPM results.
+    start_date : str or datetime-like, optional
+        The project start date used to convert ES/EF numbers to actual dates.
     """
-    Creates an interactive Gantt chart using Plotly.
-    """
-    # Plotly expects dates, so we'll create start and end dates from our day numbers
-    # We'll use a dummy start date for the project
-    project_start_date = pd.to_datetime('2025-01-01')
+    # Plotly expects real dates, so convert the provided start_date
+    project_start_date = pd.to_datetime(start_date)
 
     df_gantt = df.copy()
     df_gantt['start'] = project_start_date + pd.to_timedelta(df_gantt['ES'] - 1, unit='D')

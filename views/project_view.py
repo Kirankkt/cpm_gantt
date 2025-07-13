@@ -12,6 +12,12 @@ def show_project_view():
     Now includes Import and Export functionality.
     """
     st.header("1. Manage Your Project Tasks")
+    # Allow the user to specify the project's start date
+    start_date = st.date_input(
+        "Select Project Start Date",
+        value=pd.to_datetime("2025-01-01").date(),
+        key="project_start_date"
+    )
 
     # --- NEW: IMPORT SECTION ---
     with st.expander("Import Project from CSV File"):
@@ -80,7 +86,7 @@ def show_project_view():
                 st.info(f"**Critical Path:** {' → '.join(critical_path_tasks)}")
 
                 st.header("4. Project Gantt Chart")
-                gantt_fig = create_gantt_chart(result_df)
+                gantt_fig = create_gantt_chart(result_df, start_date=start_date)
                 st.plotly_chart(gantt_fig, use_container_width=True)
 
     # --- NEW: DOWNLOAD SECTION ---
