@@ -43,12 +43,13 @@ def show_project_view(project_id: int = 1) -> None:
     if df_tasks.empty:
         df_tasks = get_sample_data()
 
-    edited_df = st.experimental_data_editor(
+    edited_df = st.data_editor(
         df_tasks,
         use_container_width=True,
         num_rows="dynamic",
         key="task_editor",
     )
+
 
     # ------------------------------------------------------------------ #
     #  Save + CPM + Gantt                                                #
