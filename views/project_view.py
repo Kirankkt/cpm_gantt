@@ -26,7 +26,7 @@ def show_project_view():
         uploaded_file = st.file_uploader(
             "Upload a schedule CSV to load tasks. This will replace the current list.",
             type=['csv'],
-            help="CSV must include columns: Task ID, Task Description, Predecessors, Duration."
+            help="CSV must include columns: Task ID, Task Description, Predecessors, Duration, Start Date."
         )
         if uploaded_file is not None:
             try:
@@ -46,6 +46,8 @@ def show_project_view():
     # Load data from database
     try:
         project_df = get_project_data_from_db()
+        if "Start Date" not in project_df.columns:
+            project_df["Start Date"] = pd.NaT
         if project_df.empty:
             st.info("Your schedule is empty. Sample tasks have been loaded for you to edit or replace.")
             project_df = get_sample_data()
@@ -58,7 +60,10 @@ def show_project_view():
         project_df,
         num_rows="dynamic",
         use_container_width=True,
-        key="data_editor" # Assign a key to maintain state
+        key="data_editor", # Assign a key to maintain state
+        column_config={
+            "Start Date": st.column_config.DateColumn("Start Date")
+        }
     )
 
     if st.button("Save Schedule and Calculate Critical Path", type="primary"):
@@ -71,6 +76,8 @@ def show_project_view():
         else:
             with st.spinner("Saving and calculating..."):
                 edited_df['Predecessors'] = edited_df['Predecessors'].astype(str).fillna('')
+                if 'Start Date' in edited_df.columns:
+                    edited_df['Start Date'] = pd.to_datetime(edited_df['Start Date'])
                 save_project_data_to_db(edited_df)
                 st.success("Schedule data has been saved!")
 

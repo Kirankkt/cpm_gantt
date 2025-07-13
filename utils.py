@@ -14,7 +14,8 @@ def get_sample_data():
         'Predecessors': [
             '', 'A', 'B', 'C', 'C', 'D,E', 'D', 'F,G'
         ],
-        'Duration': [5, 10, 15, 20, 12, 18, 9, 3]
+        'Duration': [5, 10, 15, 20, 12, 18, 9, 3],
+        'Start Date': [None] * 8
     }
     df = pd.DataFrame(data)
     return df

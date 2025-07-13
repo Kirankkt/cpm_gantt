@@ -21,6 +21,7 @@ def initialize_database():
                     description TEXT NOT NULL,
                     predecessors TEXT,
                     duration INTEGER NOT NULL,
+                    start_date TEXT,
                     UNIQUE(project_id, task_id_str)
                 );
             """))
@@ -32,16 +33,22 @@ def get_project_data_from_db(project_id=1):
     as a pandas DataFrame, which our app knows how to work with.
     """
     query = text("""
-        SELECT 
-            task_id_str as "Task ID", 
-            description as "Task Description", 
-            predecessors as "Predecessors", 
-            duration as "Duration" 
+        SELECT
+            task_id_str as "Task ID",
+            description as "Task Description",
+            predecessors as "Predecessors",
+            duration as "Duration",
+            start_date as "Start Date"
         FROM tasks 
         WHERE project_id = :proj_id
     """)
     with engine.connect() as connection:
         df = pd.read_sql(query, connection, params={"proj_id": project_id})
+
+    # Convert start date column to datetime objects for easier handling
+    if 'Start Date' in df.columns:
+        df['Start Date'] = pd.to_datetime(df['Start Date'])
+
     return df
 
 def save_project_data_to_db(df, project_id=1):
@@ -62,7 +69,7 @@ def import_df_to_db(df, project_id=1):
     df_to_save = df.copy()
     
     # Ensure standard required columns exist
-    required_cols = ["Task ID", "Task Description", "Predecessors", "Duration"]
+    required_cols = ["Task ID", "Task Description", "Predecessors", "Duration", "Start Date"]
     for col in required_cols:
         if col not in df_to_save.columns:
             raise ValueError(f"Uploaded file is missing required column: {col}")
@@ -74,11 +81,16 @@ def import_df_to_db(df, project_id=1):
         "Task ID": "task_id_str",
         "Task Description": "description",
         "Predecessors": "predecessors",
-        "Duration": "duration"
+        "Duration": "duration",
+        "Start Date": "start_date"
     })
+
+    # Convert start_date to ISO format strings for consistent storage
+    if 'start_date' in df_to_save.columns:
+        df_to_save['start_date'] = pd.to_datetime(df_to_save['start_date']).dt.strftime('%Y-%m-%d')
     
     # Select only the columns that match the database table to avoid errors
-    db_cols = ["project_id", "task_id_str", "description", "predecessors", "duration"]
+    db_cols = ["project_id", "task_id_str", "description", "predecessors", "duration", "start_date"]
     df_to_save = df_to_save[db_cols]
 
     with engine.connect() as connection:
