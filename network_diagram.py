@@ -47,30 +47,37 @@ def _add_start_end(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _lane_positions(df: pd.DataFrame,
-                    x_gap: float = 1.4,
-                    y_gap: float = 1.1):
+                    x_gap: float = 1.5,
+                    crit_y: float = 0,
+                    noncrit_y_gap: float = 1.2):
     """
-    Deterministic position: x = ES * x_gap ; y = first free lane.
+    • Critical tasks live on y = 0 (straight line)
+    • Non-critical tasks stack downward in tidy tiers
     """
-    lanes_right_edge: list[float] = []
+    crit_set = set(df.loc[df["On Critical Path?"] == "Yes", "Task ID"])
+    lane_right: list[float] = []
     pos = {}
 
     df = df.sort_values(["ES", "Task ID"])
-    for _, row in df.iterrows():
-        x = row["ES"] * x_gap
-        duration = max(1, row["Duration"]) * x_gap
-        # find vacant lane
-        for lane, rightmost in enumerate(lanes_right_edge):
-            if rightmost < x:
-                break
-        else:
-            lane = len(lanes_right_edge)
-            lanes_right_edge.append(0)
+    for _, r in df.iterrows():
+        x = r["ES"] * x_gap
+        duration = max(1, r["Duration"]) * x_gap
 
-        lanes_right_edge[lane] = x + duration
-        y = -lane * y_gap
-        pos[row["Task ID"]] = (x, y)
+        if r["Task ID"] in crit_set:          # ------- critical lane (y=0)
+            y = crit_y
+        else:                                 # ------- find next free lane
+            for lane, right_x in enumerate(lane_right):
+                if right_x < x:
+                    break
+            else:
+                lane = len(lane_right)
+                lane_right.append(0)
+            lane_right[lane] = x + duration
+            y = -(lane + 1) * noncrit_y_gap   # start at −1 * gap
+
+        pos[r["Task ID"]] = (x, y)
     return pos
+
 
 
 def _build_graph(df: pd.DataFrame) -> nx.DiGraph:
