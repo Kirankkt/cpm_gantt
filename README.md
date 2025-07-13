@@ -36,3 +36,12 @@ The **Critical Path Method** is a technique for analysing task dependencies to d
 
 After running the calculation, the application displays an interactive **Gantt chart**. Each bar represents a task, positioned along a timeline based on its early start and finish. Tasks on the critical path are highlighted, providing a clear visual overview of the schedule.
 
+
+## Running Tests
+
+Unit tests use [pytest](https://pytest.org). After installing dependencies, run:
+
+```bash
+pytest
+```
+
