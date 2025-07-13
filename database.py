@@ -25,7 +25,15 @@ def initialize_database():
                     UNIQUE(project_id, task_id_str)
                 );
             """))
+            connection.commit()
             print("Database initialized and 'tasks' table created.")
+        else:
+            inspector = inspect(engine)
+            columns = [col["name"] for col in inspector.get_columns("tasks")]
+            if "start_date" not in columns:
+                connection.execute(text("ALTER TABLE tasks ADD COLUMN start_date TEXT"))
+                connection.commit()
+                print("'start_date' column added to existing tasks table.")
 
 def get_project_data_from_db(project_id=1):
     """
