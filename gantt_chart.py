@@ -99,27 +99,28 @@ def create_gantt_chart(
     annotations = []
     id_to_row = gdf.set_index("Task ID")
 
-    for succ in gdf.itertuples():
-        succ_y = succ.Task_Description            # ← use the safe name
-        for p in str(succ.Predecessors).split(","):
+    for _, succ in gdf.iterrows():
+        succ_y   = succ["Task Description"]
+        succ_x   = succ["Start"]
+        succ_crit = succ["IsCritical"]
+
+        for p in str(succ["Predecessors"]).split(","):
             p = p.strip()
             if not p or p not in id_to_row.index:
                 continue
-
             pred = id_to_row.loc[p]
-            pred_y = pred["Task Description"]     # DataFrame keeps original
-
-            color = "red" if (pred["IsCritical"] and succ.IsCritical) else "#666"
+            color = "red" if (pred["IsCritical"] and succ_crit) else "#666"
 
             annotations.append(
                 dict(
-                    x=succ.Start, y=succ_y,
-                    ax=pred.Finish, ay=pred_y,
+                    x=succ_x, y=succ_y,
+                    ax=pred["Finish"], ay=pred["Task Description"],
                     xref="x", yref="y", axref="x", ayref="y",
                     showarrow=True, arrowhead=3, arrowsize=1, arrowwidth=2,
                     arrowcolor=color,
                 )
             )
+
 
 
     # ------------------------------------------------------------------ #
