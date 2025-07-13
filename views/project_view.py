@@ -68,8 +68,9 @@ def show_project_view(project_id: int = 1) -> None:
         st.plotly_chart(net_fig, use_container_width=True)
 
         st.subheader("4. Project Gantt Chart")
-        fig = create_gantt_chart(cpm_df, start_date=start_date)
-        st.plotly_chart(fig, use_container_width=True)
+        gantt_fig = create_gantt_chart(cpm_df, start_date=start_date)
+        st.plotly_chart(gantt_fig, use_container_width=True)
+
 
         
 
