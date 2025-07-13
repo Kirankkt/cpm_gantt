@@ -18,7 +18,8 @@ def create_network_figure(df: pd.DataFrame) -> go.Figure:
     g = build_network(df)
 
     # simple spring-layout for clarity
-    pos = nx.spring_layout(g, seed=42)
+    pos = nx.nx_agraph.graphviz_layout(g, prog="dot")
+
 
     edge_x = []
     edge_y = []
