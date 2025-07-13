@@ -2,6 +2,15 @@ import streamlit as st
 from database import initialize_database
 from views.project_view import show_project_view
 
+# app.py  (top of file)
+import streamlit as st
+from database import initialize_database
+
+initialize_database()          # <-- run migrations first
+
+from views.project_view import show_project_view
+
+
 # --- 1. Set Page Configuration ---
 # This should be the first Streamlit command in your app.
 st.set_page_config(
