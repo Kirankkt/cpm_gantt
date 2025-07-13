@@ -18,7 +18,7 @@ def create_gantt_chart(df: pd.DataFrame,
     gdf = df.copy()
     gdf["Start"]  = anchor + pd.to_timedelta(gdf["ES"] - 1, unit="D")
     gdf["Finish"] = anchor + pd.to_timedelta(gdf["EF"] - 1, unit="D")
-    gdf["IsMilestone"] = gdf["Duration"] <= 0
+    gdf["IsMilestone"] = gdf["Duration"].astype(float).lt(0.01)   # ← FIX
 
     fig = go.Figure()
 
