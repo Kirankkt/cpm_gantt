@@ -4,9 +4,18 @@ import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 
 # ------------------------------------------------------------------
-# Persistent DB: /mnt/data is the writable volume
+# Persistent DB lives in /mnt/data   (writable on Streamlit Cloud)
 # ------------------------------------------------------------------
-DB_FILE = os.environ.get("DATABASE_PATH", "/mnt/data/projects.db")
+DATA_DIR = pathlib.Path("/mnt/data")
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)   # no-op if already there
+except PermissionError as e:
+    # fallback to in-app directory so the app stays up (non-persistent)
+    import tempfile, warnings
+    warnings.warn(f"{e} — falling back to a temp DB")
+    DATA_DIR = pathlib.Path(tempfile.gettempdir())
+
+DB_FILE = os.environ.get("DATABASE_PATH", str(DATA_DIR / "projects.db"))
 engine  = create_engine(f"sqlite:///{DB_FILE}", echo=False)
 
 
