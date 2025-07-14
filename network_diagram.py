@@ -87,6 +87,11 @@ def create_network_figure(df: pd.DataFrame) -> go.Figure:
     pos    = _positions(df_net)
     crit   = set(df_net.loc[df_net["On Critical Path?"] == "Yes", "Task ID"])
 
+    # —— guard against ghost nodes ————————————————
+    missing_nodes = [n for n in g.nodes() if n not in pos]
+    if missing_nodes:
+        g.remove_nodes_from(missing_nodes)
+    # ————————————————————————————————————————————————
     # Nodes ----------------------------------------------------------
     node_trace = go.Scatter(
         x=[pos[n][0] for n in g.nodes()],
