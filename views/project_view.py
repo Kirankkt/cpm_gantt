@@ -123,6 +123,11 @@ def show_project_view(project_id: int = 1) -> None:
                 current.to_csv(f"backup_project{project_id}_{ts}.csv", index=False)
             save_project_data_to_db(cleaned, project_id=project_id)
             st.success("Imported and saved to database.")
+        # ── RE-ADD these three lines ────────────────────────────────────
+        df_tasks = get_project_data_from_db(project_id)
+        if df_tasks.empty:
+            df_tasks = get_sample_data()
+        df_tasks = ensure_percent_column(df_tasks)      # always has % column
 
     # ── Editable grid + Save in one atomic form ───────────────────
     with st.form(key="schedule_form", clear_on_submit=False):
