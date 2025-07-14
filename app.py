@@ -9,7 +9,7 @@ st.set_page_config(page_title="Collaborative CPM Tool",
                    page_icon="🏗️",
                    layout="wide")
 
-st.title("🏗️ Collaborative Renovation Project Hub")
+st.title("🏗️ Collaborative Renovation Project Hub II")
 st.markdown(
     """
 Welcome! This is your central hub for managing the renovation project.  
