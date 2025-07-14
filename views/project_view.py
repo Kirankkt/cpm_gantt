@@ -130,17 +130,17 @@ def show_project_view(project_id: int = 1) -> None:
         key="task_editor",
     )
 
-    # ── Save + CPM --------------------------------------------------
-   if st.button("Save Schedule and Calculate Critical Path", type="primary"):
+        # ── Save + CPM --------------------------------------------------
+    if st.button("Save Schedule and Calculate Critical Path", type="primary"):
 
-        # ── NEW: keep Percent Complete between 0-100 ────────────────────
+        # keep Percent Complete between 0-100
         if "Percent Complete" in edited_df.columns:
             edited_df["Percent Complete"] = (
                 pd.to_numeric(edited_df["Percent Complete"], errors="coerce")
                 .fillna(0)
                 .clip(0, 100)
             )
-    
+
         save_project_data_to_db(edited_df, project_id=project_id)
 
         cpm_df = calculate_cpm(edited_df)
