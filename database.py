@@ -1,15 +1,17 @@
 import os
+import pathlib
 import pandas as pd
 from sqlalchemy import create_engine, inspect, text
 
-# ------------------------------------------------------------------ #
-#  Database configuration                                            #
-# ------------------------------------------------------------------ #
 # ------------------------------------------------------------------
-# Persistent DB lives in /mount/data (Streamlit Cloud keeps this dir)
+# Persistent DB lives in /mount/data  – create the dir if absent
 # ------------------------------------------------------------------
-DB_FILE = os.environ.get("DATABASE_PATH", "/mount/data/projects.db")
+PERSIST_DIR = pathlib.Path("/mount/data")
+PERSIST_DIR.mkdir(parents=True, exist_ok=True)   # ← NEW
+
+DB_FILE = os.environ.get("DATABASE_PATH", str(PERSIST_DIR / "projects.db"))
 engine  = create_engine(f"sqlite:///{DB_FILE}", echo=False)
+
 
 
 # ------------------------------------------------------------------ #
