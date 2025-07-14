@@ -27,16 +27,26 @@ def show_project_view(project_id: int = 1) -> None:
     )
 
     if uploaded_file is not None:
-        import_df = (
-            pd.read_excel(uploaded_file)
-            if uploaded_file.name.lower().endswith(("xls", "xlsx"))
-            else pd.read_csv(uploaded_file)
-        )
+    import_df = (
+        pd.read_excel(uploaded_file)
+        if uploaded_file.name.lower().endswith(("xls", "xlsx"))
+        else pd.read_csv(uploaded_file)
+    )
+
+    # --- preview table ---
+    st.info("Preview of uploaded file:")
+    st.dataframe(import_df.head(), use_container_width=True)
+
+    # --- confirmation checkbox ---
+    if st.checkbox("Overwrite existing schedule with this file?"):
+        # ➊ back up current DB to CSV
+        current = get_project_data_from_db(project_id)
+        ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        current.to_csv(f"backup_project{project_id}_{ts}.csv", index=False)
+        # ➋ overwrite
         save_project_data_to_db(import_df, project_id=project_id)
-        st.success(
-            f"Imported {len(import_df)} tasks. "
-            "Press **Save Schedule and Calculate Critical Path** below."
-        )
+        st.success("Schedule replaced. Previous version saved as CSV.")
+
 
     # ------------------------------------------------------------------ #
     #  Load tasks (DB → editable grid)                                   #
