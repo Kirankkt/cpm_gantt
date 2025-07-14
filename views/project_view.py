@@ -1,4 +1,8 @@
 # views/project_view.py
+# ==============================================================
+# Collaborative CPM Tool – main Streamlit workspace
+# ==============================================================
+
 from __future__ import annotations
 import pandas as pd
 import streamlit as st
@@ -12,8 +16,9 @@ from network_diagram import create_network_figure
 REQUIRED = ["Task ID", "Task Description", "Predecessors", "Duration"]
 
 
-# ─────────────────────────── helpers ─────────────────────────────
+# ─────────────────────────── helpers ────────────────────────────
 def guarantee_percent(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure a Percent Complete column (default 0)."""
     if "Percent Complete" not in df.columns:
         df["Percent Complete"] = 0
     return df
@@ -27,41 +32,43 @@ def show_project_view(project_id: int = 1) -> None:
         "Construction Start Date", value=pd.Timestamp("2025-01-01")
     )
 
-    # --------- always load latest tasks from DB -------------------
+    # -------- 1 · always load latest tasks from persistent DB -----
     df_tasks = get_project_data_from_db(project_id)
     if df_tasks.empty:
         df_tasks = get_sample_data()
     df_tasks = guarantee_percent(df_tasks)
 
-    # put initial data in session_state (first load only)
-    if "task_grid" not in st.session_state:
-        st.session_state["task_grid"] = df_tasks.copy()
+    # put initial data into session (first run only)
+    if "grid_df" not in st.session_state:
+        st.session_state["grid_df"] = df_tasks.copy()
 
+    # -------- 2 · editable grid -----------------------------------
     st.subheader("1 · Editable Task Table")
-    st.data_editor(
-        st.session_state["task_grid"],
+    edited_df = st.data_editor(
+        st.session_state["grid_df"],          # current working copy
         use_container_width=True,
         num_rows="dynamic",
-        key="task_grid",
+        key="task_grid",                      # widget key
     )
+    # keep cache in sync on every rerun
+    st.session_state["grid_df"] = edited_df.copy()
 
-    # --------- Save button ----------------------------------------
+    # -------- 3 · save button -------------------------------------
     if st.button("💾 Save to DB & Re-calculate", type="primary"):
-        edited_df = pd.DataFrame(st.session_state["task_grid"])
-        edited_df = guarantee_percent(edited_df)
-        edited_df["Percent Complete"] = (
-            pd.to_numeric(edited_df["Percent Complete"], errors="coerce")
+        to_save = guarantee_percent(pd.DataFrame(st.session_state["grid_df"]))
+        to_save["Percent Complete"] = (
+            pd.to_numeric(to_save["Percent Complete"], errors="coerce")
             .fillna(0)
             .clip(0, 100)
         )
-        save_project_data_to_db(edited_df, project_id)
+        save_project_data_to_db(to_save, project_id)
         st.success("Saved to database.")
 
-        # replace working copy with what we just saved
-        st.session_state["task_grid"] = edited_df.copy()
+        # update cache so charts below use the saved, canonical data
+        st.session_state["grid_df"] = to_save.copy()
 
-    # --------- CPM & charts built from current grid ---------------
-    working_df = pd.DataFrame(st.session_state["task_grid"])
+    # -------- 4 · build CPM & charts from working copy ------------
+    working_df = pd.DataFrame(st.session_state["grid_df"])
     if not working_df.empty:
         cpm_df = calculate_cpm(working_df)
 
