@@ -5,8 +5,12 @@ from sqlalchemy import create_engine, inspect, text
 # ------------------------------------------------------------------ #
 #  Database configuration                                            #
 # ------------------------------------------------------------------ #
-DB_FILE = os.environ.get("DATABASE_PATH", "projects.db")
-engine  = create_engine(f"sqlite:///{DB_FILE}")
+# ------------------------------------------------------------------
+# Persistent DB lives in /mount/data (Streamlit Cloud keeps this dir)
+# ------------------------------------------------------------------
+DB_FILE = os.environ.get("DATABASE_PATH", "/mount/data/projects.db")
+engine  = create_engine(f"sqlite:///{DB_FILE}", echo=False)
+
 
 # ------------------------------------------------------------------ #
 #  Schema creation and lightweight migrations                        #
