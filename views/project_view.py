@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from database import (
-    get_project_data_from_db,
+from database import (get_project_data_from_db,
     save_project_data_to_db,
 )
 from cpm_logic import calculate_cpm
