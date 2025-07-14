@@ -53,11 +53,15 @@ def clean_task_df(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def validate_predecessors(df: pd.DataFrame) -> None:
-    """Ensure every predecessor ID exists in the Task ID column."""
+    """Ensure every predecessor ID exists in the Task-ID column."""
     ids = set(df["Task ID"])
     issues = {}
     for t_id, preds in zip(df["Task ID"], df["Predecessors"]):
-        missing = [p.strip() for p in str(preds).split(",") if p.strip() and p.strip() not in ids]
+        missing = [
+            p.strip()
+            for p in str(preds).split(",")
+            if p.strip() and p.strip().lower() != "nan" and p.strip() not in ids
+        ]
         if missing:
             issues[t_id] = missing
 
@@ -68,6 +72,7 @@ def validate_predecessors(df: pd.DataFrame) -> None:
             f"exist in the table:\n• " + "\n• ".join(msgs)
         )
         st.stop()
+
 
 
 # ──────────────────────────────────────────────────────────────────────
