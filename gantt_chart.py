@@ -1,80 +1,90 @@
 """
-Gantt chart (Plotly Express timeline base)
+Enhanced Plotly Gantt chart
 
-• Blue bars, red outline if critical
-• Grey inner bar = % complete (optional)
-• Milestones (0-duration) drawn as diamonds
-• Finish-to-Start arrows with arrowheads
+• Bar colour reflects status (done / in-progress / not-started)
+• Critical-path tasks outlined *and* filled red
+• % complete label over each bar
+• Today line, weekend shading, weekly grid
+• Milestone diamonds
+• Arrow-headed Finish-to-Start connectors
 """
+
+from __future__ import annotations
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 
+# ──────────────────────────────────────────────────────────────────────
+#  Palette helpers
+# ──────────────────────────────────────────────────────────────────────
+COLORS = {
+    "done":        "#4CAF50",
+    "progress":    "#FF9800",
+    "notstarted":  "#3F51B5",
+    "critical":    "#E53935",
+}
+
+
+def _status_colour(pct: float | None, critical: bool) -> str:
+    if critical:
+        return COLORS["critical"]
+    if pct is None:
+        return COLORS["notstarted"]
+    if pct >= 100:
+        return COLORS["done"]
+    if pct > 0:
+        return COLORS["progress"]
+    return COLORS["notstarted"]
+
+
+# ──────────────────────────────────────────────────────────────────────
+#  Main entry point
+# ──────────────────────────────────────────────────────────────────────
 def create_gantt_chart(
     df: pd.DataFrame,
     start_date="2025-01-01",
-    progress_col: str | None = None,
+    progress_col: str = "Percent Complete",
 ) -> go.Figure:
-    # ------------------------------------------------------------------ #
-    #  0. Prep dates & helper flags                                       #
-    # ------------------------------------------------------------------ #
     anchor = pd.to_datetime(start_date)
 
     gdf = df.copy()
-    gdf["Start"] = anchor + pd.to_timedelta(gdf["ES"] - 1, unit="D")
+    gdf["Start"]  = anchor + pd.to_timedelta(gdf["ES"] - 1, unit="D")
     gdf["Finish"] = anchor + pd.to_timedelta(gdf["EF"] - 1, unit="D")
     gdf["IsMilestone"] = gdf["Duration"].astype(float).lt(0.01)
-    gdf["IsCritical"] = gdf["On Critical Path?"].eq("Yes")
+    gdf["IsCritical"]  = gdf["On Critical Path?"].eq("Yes")
+    if progress_col not in gdf.columns:
+        gdf[progress_col] = 0
 
-    # ------------------------------------------------------------------ #
-    #  1. Main bars via px.timeline                                       #
-    # ------------------------------------------------------------------ #
-    bar_df = gdf.loc[~gdf["IsMilestone"]].copy()
+    # -- colour per row
+    gdf["_colour"] = [
+        _status_colour(p, crit)
+        for p, crit in zip(gdf[progress_col], gdf["IsCritical"])
+    ]
 
+    # ── 1. Bars via px.timeline ─────────────────────────────────────
+    bars = gdf.loc[~gdf["IsMilestone"]]
     fig = px.timeline(
-        bar_df,
+        bars,
         x_start="Start",
         x_end="Finish",
         y="Task Description",
-        color_discrete_sequence=["#3F51B5"],
+        color="_colour",
+        color_discrete_map="identity",
     )
 
-    # -- red outline for critical tasks
-    for trace, iscrit in zip(fig.data, bar_df["IsCritical"]):
-        if iscrit:
+    # outline critical
+    for trace, crit in zip(fig.data, bars["IsCritical"]):
+        if crit:
             trace.update(marker=dict(line=dict(color="red", width=2)))
 
-    # ------------------------------------------------------------------ #
-    #  2. Progress overlay                                                #
-    # ------------------------------------------------------------------ #
-    if progress_col and progress_col in gdf.columns:
-        shapes = []
-        for r in bar_df.itertuples():
-            pct = max(0, min(100, getattr(r, progress_col))) / 100
-            if pct == 0:
-                continue
-            shapes.append(
-                dict(
-                    type="rect",
-                    xref="x", yref="y",
-                    x0=r.Start,
-                    x1=r.Start + (r.Finish - r.Start) * pct,
-                    y0=r._asdict()["Task Description"] + ":bottom",
-                    y1=r._asdict()["Task Description"] + ":top",
-                    fillcolor="#9E9E9E",
-                    line_width=0,
-                    opacity=0.6,
-                    layer="below",
-                )
-            )
-        if shapes:
-            fig.update_layout(shapes=shapes)
+    # % label
+    for trace, pct in zip(fig.data, bars[progress_col]):
+        text = f"{pct:.0f} %" if pct else ""
+        trace.update(text=[text], textposition="inside", textfont_color="white")
 
-    # ------------------------------------------------------------------ #
-    #  3. Milestone diamonds                                              #
-    # ------------------------------------------------------------------ #
+    # ── 2. Milestones ───────────────────────────────────────────────
     mile_df = gdf.loc[gdf["IsMilestone"]]
     if not mile_df.empty:
         fig.add_trace(
@@ -85,7 +95,11 @@ def create_gantt_chart(
                 marker=dict(
                     symbol="diamond-wide",
                     size=14,
-                    color=["red" if c else "#3F51B5" for c in mile_df["IsCritical"]],
+                    color=[
+                        COLORS["critical"] if c else COLORS["notstarted"]
+                        for c in mile_df["IsCritical"]
+                    ],
+                    line=dict(width=1, color="black"),
                 ),
                 hovertext=mile_df["Task ID"] + " – " + mile_df["Task Description"],
                 hoverinfo="text",
@@ -93,48 +107,109 @@ def create_gantt_chart(
             )
         )
 
-    # ------------------------------------------------------------------ #
-    #  4. FS dependency arrows                                            #
-    # ------------------------------------------------------------------ #
-    annotations = []
+    # ── 3. FS arrows ────────────────────────────────────────────────
+    ann = []
     id_to_row = gdf.set_index("Task ID")
-
     for _, succ in gdf.iterrows():
-        succ_y   = succ["Task Description"]
-        succ_x   = succ["Start"]
-        succ_crit = succ["IsCritical"]
-
+        succ_y = succ["Task Description"]
+        succ_x = succ["Start"]
         for p in str(succ["Predecessors"]).split(","):
             p = p.strip()
             if not p or p not in id_to_row.index:
                 continue
             pred = id_to_row.loc[p]
-            color = "red" if (pred["IsCritical"] and succ_crit) else "#666"
-
-            annotations.append(
+            colour = (
+                COLORS["critical"]
+                if pred["IsCritical"] and succ["IsCritical"]
+                else "#666"
+            )
+            ann.append(
                 dict(
-                    x=succ_x, y=succ_y,
-                    ax=pred["Finish"], ay=pred["Task Description"],
-                    xref="x", yref="y", axref="x", ayref="y",
-                    showarrow=True, arrowhead=3, arrowsize=1, arrowwidth=2,
-                    arrowcolor=color,
+                    x=succ_x,
+                    y=succ_y,
+                    ax=pred["Finish"],
+                    ay=pred["Task Description"],
+                    xref="x",
+                    yref="y",
+                    axref="x",
+                    ayref="y",
+                    showarrow=True,
+                    arrowhead=3,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor=colour,
                 )
             )
 
-
-
-    # ------------------------------------------------------------------ #
-    #  5. Layout                                                         #
-    # ------------------------------------------------------------------ #
-    fig.update_layout(
-        annotations=annotations,
-        xaxis=dict(title="Timeline",
-                   tickformat="%b %d\n%Y",
-                   showgrid=True, gridcolor="#EEE"),
-        yaxis=dict(autorange="reversed"),
-        title="Project Gantt Chart",
-        height=400 + 24 * len(gdf),
-        margin=dict(l=20, r=20, t=40, b=40),
-        showlegend=False,
+    # ── 4. Weekend shading & today line ─────────────────────────────
+    shapes = []
+    # weekend stripes
+    cal = pd.date_range(gdf["Start"].min(), gdf["Finish"].max(), freq="D")
+    for d in cal:
+        if d.weekday() >= 5:  # Saturday/Sunday
+            shapes.append(
+                dict(
+                    type="rect",
+                    xref="x",
+                    yref="paper",
+                    x0=d,
+                    x1=d + pd.Timedelta(days=1),
+                    y0=0,
+                    y1=1,
+                    fillcolor="#F9F9F9",
+                    line_width=0,
+                    layer="below",
+                )
+            )
+    # today line
+    today = pd.Timestamp.today().normalize()
+    shapes.append(
+        dict(
+            type="line",
+            xref="x",
+            yref="paper",
+            x0=today,
+            x1=today,
+            y0=0,
+            y1=1,
+            line=dict(color="black", width=1, dash="dash"),
+        )
     )
+
+    # ── 5. Layout polish ────────────────────────────────────────────
+    fig.update_layout(
+        annotations=ann,
+        shapes=shapes,
+        title="Project Gantt Chart",
+        height=500 + 22 * len(gdf),
+        margin=dict(l=120, r=40, t=50, b=40),
+        legend_title="Task Status",
+        xaxis=dict(
+            title="Timeline",
+            tickformat="%b %d\n%Y",
+            showgrid=True,
+            gridcolor="#ECECEC",
+        ),
+        yaxis=dict(autorange="reversed"),
+    )
+
+    # custom legend entries
+    for name, col in [
+        ("Not started", COLORS["notstarted"]),
+        ("In progress", COLORS["progress"]),
+        ("Done", COLORS["done"]),
+        ("Critical path", COLORS["critical"]),
+    ]:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker=dict(size=10, color=col),
+                legendgroup=name,
+                showlegend=True,
+                name=name,
+            )
+        )
+
     return fig
