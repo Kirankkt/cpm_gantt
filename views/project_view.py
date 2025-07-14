@@ -1,6 +1,6 @@
 # views/project_view.py
 # ==============================================================
-# Streamlit “Construction Hub” main workspace
+# Collaborative CPM Tool – main Streamlit workspace
 # ==============================================================
 
 from __future__ import annotations
@@ -18,157 +18,139 @@ from network_diagram import create_network_figure
 # ───────────────────────────────────────────────────────────────
 # Helpers
 # ───────────────────────────────────────────────────────────────
-REQUIRED_COLS = ["Task ID", "Task Description", "Predecessors", "Duration"]
+REQUIRED = ["Task ID", "Task Description", "Predecessors", "Duration"]
 
 
-def ensure_percent_column(df: pd.DataFrame) -> pd.DataFrame:
-    """Guarantee a `Percent Complete` column (0 – 100)."""
+def ensure_percent(df: pd.DataFrame) -> pd.DataFrame:
+    """Guarantee a Percent Complete column (0-100)."""
     if "Percent Complete" not in df.columns:
         df["Percent Complete"] = 0
     return df
 
 
-def clean_task_df(raw: pd.DataFrame) -> pd.DataFrame:
-    """Standardise headers, enforce types, add missing cols."""
+def clean_upload(raw: pd.DataFrame) -> pd.DataFrame:
+    """Validate and normalise an uploaded schedule file."""
     df = raw.copy()
     df.columns = df.columns.str.strip()
 
-    missing = [c for c in REQUIRED_COLS if c not in df.columns]
+    missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
-        st.error(f"Uploaded file is missing column(s): {', '.join(missing)}")
+        st.error("Missing column(s): " + ", ".join(missing))
         st.stop()
 
-    df = df.dropna(how="all")                      # drop blank rows
+    df = df.dropna(how="all")
     df["Task ID"] = df["Task ID"].astype(str).str.strip()
-    df = df[df["Task ID"] != ""]                   # no empty IDs
-
-    # Duplicate IDs?
     if df["Task ID"].duplicated().any():
-        dups = ", ".join(df.loc[df["Task ID"].duplicated(), "Task ID"].unique())
-        st.error(f"Duplicate Task ID(s): {dups}")
+        st.error("Duplicate Task IDs found.")
         st.stop()
 
-    # Duration must be numeric & ≥0
     df["Duration"] = pd.to_numeric(df["Duration"], errors="coerce")
-    bad = df["Duration"].isna() | (df["Duration"] < 0)
-    if bad.any():
-        st.error(
-            "Invalid Duration for task(s): "
-            + ", ".join(df.loc[bad, "Task ID"])
-        )
+    if df["Duration"].isna().any() or (df["Duration"] < 0).any():
+        st.error("Duration must be numeric and ≥ 0.")
         st.stop()
 
-    # Optional columns
     if "Start Date" not in df.columns:
         df["Start Date"] = None
-
-    df = ensure_percent_column(df)
-    return df
+    return ensure_percent(df)
 
 
-def validate_predecessors(df: pd.DataFrame) -> None:
-    """Ensure every predecessor ID exists in the Task-ID column."""
+def check_predecessors(df: pd.DataFrame) -> None:
     ids = set(df["Task ID"])
-    issues: dict[str, list[str]] = {}
-
-    for t_id, preds in zip(df["Task ID"], df["Predecessors"]):
-        bad_refs = [
-            p.strip()
-            for p in str(preds).split(",")
-            if p.strip() and p.strip() not in ids
-        ]
-        if bad_refs:
-            issues[t_id] = bad_refs
-
-    if issues:
-        msg_lines = [f"{k} → {', '.join(v)}" for k, v in issues.items()]
+    bad: list[str] = []
+    for tid, preds in zip(df["Task ID"], df["Predecessors"]):
+        for p in str(preds).split(","):
+            p = p.strip()
+            if p and p not in ids:
+                bad.append(f"{tid} → {p}")
+    if bad:
         st.error(
-            "The following tasks reference predecessor IDs that do not exist:\n• "
-            + "\n• ".join(msg_lines)
+            "Predecessor reference to non-existent ID:\n• " + "\n• ".join(bad)
         )
         st.stop()
 
 
 # ───────────────────────────────────────────────────────────────
-# Main Streamlit page
+# Main view
 # ───────────────────────────────────────────────────────────────
 def show_project_view(project_id: int = 1) -> None:
-    """Render the schedule-management UI."""
     st.header("1. Manage Construction Tasks")
 
     start_date = st.date_input(
         "Construction Start Date", value=pd.Timestamp("2025-01-01")
     )
 
-    # ── File uploader (optional import) ──────────────────────────
-    uploaded_file = st.file_uploader(
-        "Import schedule (Excel .xlsx / .xls or CSV)",
+    # ── 1. Optional file import ──────────────────────────────────
+    up = st.file_uploader(
+        "Import schedule (Excel or CSV)",
         type=["csv", "xls", "xlsx"],
-        help="Required columns: " + ", ".join(REQUIRED_COLS),
+        help=", ".join(REQUIRED),
     )
 
-    if uploaded_file is not None:
-        raw_df = (
-            pd.read_excel(uploaded_file)
-            if uploaded_file.name.lower().endswith(("xls", "xlsx"))
-            else pd.read_csv(uploaded_file)
+    if up is not None:
+        raw = (
+            pd.read_excel(up)
+            if up.name.lower().endswith(("xls", "xlsx"))
+            else pd.read_csv(up)
         )
-
-        cleaned = clean_task_df(raw_df)
-        validate_predecessors(cleaned)
+        cleaned = clean_upload(raw)
+        check_predecessors(cleaned)
 
         st.info("Preview of uploaded data:")
         st.dataframe(cleaned.head(), use_container_width=True)
 
-        if st.checkbox("Overwrite existing schedule with this file?"):
-            # simple CSV backup of current data
-            current = get_project_data_from_db(project_id)
-            if not current.empty:
+        if st.checkbox("Overwrite existing project with this file?"):
+            # lightweight backup
+            cur = get_project_data_from_db(project_id)
+            if not cur.empty:
                 ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-                current.to_csv(
-                    f"backup_project{project_id}_{ts}.csv", index=False
-                )
-            save_project_data_to_db(cleaned, project_id=project_id)
+                cur.to_csv(f"backup_project{project_id}_{ts}.csv", index=False)
+
+            save_project_data_to_db(cleaned, project_id)
             st.success("Imported and saved to database.")
 
-    # ── Load current tasks for editing ───────────────────────────
+    # ── 2. Load current tasks for editing ─────────────────────────
     df_tasks = get_project_data_from_db(project_id)
     if df_tasks.empty:
         df_tasks = get_sample_data()
-    df_tasks = ensure_percent_column(df_tasks)
+    df_tasks = ensure_percent(df_tasks)
 
-    # ── Editable grid + Save button (single form) ────────────────
-    with st.form(key="schedule_form", clear_on_submit=False):
+    # Put DataFrame into session_state so edits persist across reruns
+    if "task_editor" not in st.session_state:
+        st.session_state["task_editor"] = df_tasks.copy()
+
+    # ── 3. Edit & save inside one form ───────────────────────────
+    with st.form("schedule_form"):
         edited_df = st.data_editor(
-            df_tasks,
+            st.session_state["task_editor"],
             use_container_width=True,
             num_rows="dynamic",
-            key="task_editor",
+            key="task_grid",
         )
         submitted = st.form_submit_button(
-            "Save Schedule and Calculate Critical Path",
-            type="primary",
+            "Save Schedule and Calculate Critical Path", type="primary"
         )
 
-    # ── Run CPM + graphics when user clicks button ───────────────
+    # Update session copy regardless (so edits persist on next rerun)
+    st.session_state["task_editor"] = edited_df.copy()
+
+    # ── 4. On save: validate %, write DB, run CPM, draw charts ────
     if submitted:
-        edited_df = ensure_percent_column(edited_df)
+        edited_df = ensure_percent(edited_df)
         edited_df["Percent Complete"] = (
             pd.to_numeric(edited_df["Percent Complete"], errors="coerce")
             .fillna(0)
             .clip(0, 100)
         )
 
-        save_project_data_to_db(edited_df, project_id=project_id)
+        save_project_data_to_db(edited_df, project_id)
 
         cpm_df = calculate_cpm(edited_df)
+
         st.subheader("2. CPM Results")
         st.dataframe(cpm_df, use_container_width=True)
 
         st.subheader("3. CPM Network Diagram")
-        st.plotly_chart(
-            create_network_figure(cpm_df), use_container_width=True
-        )
+        st.plotly_chart(create_network_figure(cpm_df), use_container_width=True)
 
         st.subheader("4. Project Gantt Chart")
         st.plotly_chart(
