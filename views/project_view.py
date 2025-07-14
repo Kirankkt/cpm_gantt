@@ -40,6 +40,9 @@ def clean_upload(raw: pd.DataFrame) -> pd.DataFrame:
 
     df = df.dropna(how="all")
     df["Task ID"] = df["Task ID"].astype(str).str.strip()
+    if df["Task ID"].eq("").any():
+        st.error("Blank Task ID found.")
+        st.stop()
     if df["Task ID"].duplicated().any():
         st.error("Duplicate Task IDs found.")
         st.stop()
@@ -55,16 +58,18 @@ def clean_upload(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def check_predecessors(df: pd.DataFrame) -> None:
+    """Raise an error if any predecessor ID is undefined."""
     ids = set(df["Task ID"])
-    bad: list[str] = []
+    problems: list[str] = []
     for tid, preds in zip(df["Task ID"], df["Predecessors"]):
         for p in str(preds).split(","):
             p = p.strip()
             if p and p not in ids:
-                bad.append(f"{tid} → {p}")
-    if bad:
+                problems.append(f"{tid} ➜ {p}")
+    if problems:
         st.error(
-            "Predecessor reference to non-existent ID:\n• " + "\n• ".join(bad)
+            "Predecessor references to non-existent IDs:\n• "
+            + "\n• ".join(problems)
         )
         st.stop()
 
@@ -73,6 +78,7 @@ def check_predecessors(df: pd.DataFrame) -> None:
 # Main view
 # ───────────────────────────────────────────────────────────────
 def show_project_view(project_id: int = 1) -> None:
+    """Render the schedule-management UI."""
     st.header("1. Manage Construction Tasks")
 
     start_date = st.date_input(
@@ -83,7 +89,7 @@ def show_project_view(project_id: int = 1) -> None:
     up = st.file_uploader(
         "Import schedule (Excel or CSV)",
         type=["csv", "xls", "xlsx"],
-        help=", ".join(REQUIRED),
+        help="Required columns: " + ", ".join(REQUIRED),
     )
 
     if up is not None:
@@ -99,7 +105,7 @@ def show_project_view(project_id: int = 1) -> None:
         st.dataframe(cleaned.head(), use_container_width=True)
 
         if st.checkbox("Overwrite existing project with this file?"):
-            # lightweight backup
+            # CSV backup
             cur = get_project_data_from_db(project_id)
             if not cur.empty:
                 ts = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
@@ -108,17 +114,17 @@ def show_project_view(project_id: int = 1) -> None:
             save_project_data_to_db(cleaned, project_id)
             st.success("Imported and saved to database.")
 
-    # ── 2. Load current tasks for editing ─────────────────────────
+    # ── 2. Load current tasks for editing (ALWAYS executes) ───────
     df_tasks = get_project_data_from_db(project_id)
-    if df_tasks.empty:
+    if df_tasks.empty():
         df_tasks = get_sample_data()
     df_tasks = ensure_percent(df_tasks)
 
-    # Put DataFrame into session_state so edits persist across reruns
+    # put dataframe into session so edits survive reruns
     if "task_editor" not in st.session_state:
         st.session_state["task_editor"] = df_tasks.copy()
 
-    # ── 3. Edit & save inside one form ───────────────────────────
+    # ── 3. Edit & save inside a form ──────────────────────────────
     with st.form("schedule_form"):
         edited_df = st.data_editor(
             st.session_state["task_editor"],
@@ -127,10 +133,11 @@ def show_project_view(project_id: int = 1) -> None:
             key="task_grid",
         )
         submitted = st.form_submit_button(
-            "Save Schedule and Calculate Critical Path", type="primary"
+            "Save Schedule and Calculate Critical Path",
+            type="primary",
         )
 
-    # Update session copy regardless (so edits persist on next rerun)
+    # keep state in sync
     st.session_state["task_editor"] = edited_df.copy()
 
     # ── 4. On save: validate %, write DB, run CPM, draw charts ────
