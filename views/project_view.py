@@ -100,7 +100,7 @@ def show_project_view(project_id: int = 1) -> None:
         if st.button("Overwrite project with this file", key="import_btn"):
             save_project_data_to_db(cleaned, project_id)
             st.success("Imported and saved to database.")
-            st.experimental_rerun()              # reload UI with new data
+            st.rerun()              # reload UI with new data
 
     # ── Always load current tasks from DB (or sample) ────────────
     df_tasks = get_project_data_from_db(project_id)
@@ -126,7 +126,7 @@ def show_project_view(project_id: int = 1) -> None:
         )
         save_project_data_to_db(edited_df, project_id)
         st.success("Saved!")
-        st.experimental_rerun()                  # load fresh data + charts
+        st.rerun()                  # load fresh data + charts
 
     # —— Display CPM & charts if DB has tasks —————————————
     if not df_tasks.empty:
