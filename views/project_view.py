@@ -116,7 +116,7 @@ def show_project_view(project_id: int = 1) -> None:
 
     # ── 2. Load current tasks for editing (ALWAYS executes) ───────
     df_tasks = get_project_data_from_db(project_id)
-    if df_tasks.empty():
+    if df_tasks.empty:
         df_tasks = get_sample_data()
     df_tasks = ensure_percent(df_tasks)
 
