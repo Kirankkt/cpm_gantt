@@ -124,28 +124,29 @@ def show_project_view(project_id: int = 1) -> None:
             save_project_data_to_db(cleaned, project_id=project_id)
             st.success("Imported and saved to database.")
 
-    # ── Editable grid ──────────────────────────────────────────────
-    df_tasks = get_project_data_from_db(project_id)
-    if df_tasks.empty:
-        df_tasks = get_sample_data()
+    # ── Editable grid + Save in one atomic form ───────────────────
+    with st.form(key="schedule_form", clear_on_submit=False):
+        edited_df = st.data_editor(
+            df_tasks,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="task_editor",
+        )
+        submitted = st.form_submit_button(
+            "Save Schedule and Calculate Critical Path",
+            type="primary",
+        )
 
-    edited_df = st.data_editor(
-        df_tasks,
-        use_container_width=True,
-        num_rows="dynamic",
-        key="task_editor",
-    )
+    # ── When user clicks the button ───────────────────────────────
+    if submitted:
+        edited_df = ensure_percent_column(edited_df)
 
-        # ── Save + CPM --------------------------------------------------
-    if st.button("Save Schedule and Calculate Critical Path", type="primary"):
-
-        # keep Percent Complete between 0-100
-        if "Percent Complete" in edited_df.columns:
-            edited_df["Percent Complete"] = (
-                pd.to_numeric(edited_df["Percent Complete"], errors="coerce")
-                .fillna(0)
-                .clip(0, 100)
-            )
+        # clamp % complete to 0-100
+        edited_df["Percent Complete"] = (
+            pd.to_numeric(edited_df["Percent Complete"], errors="coerce")
+            .fillna(0)
+            .clip(0, 100)
+        )
 
         save_project_data_to_db(edited_df, project_id=project_id)
 
@@ -154,9 +155,10 @@ def show_project_view(project_id: int = 1) -> None:
         st.dataframe(cpm_df, use_container_width=True)
 
         st.subheader("3. CPM Network Diagram")
-        net_fig = create_network_figure(cpm_df)
-        st.plotly_chart(net_fig, use_container_width=True)
+        st.plotly_chart(create_network_figure(cpm_df), use_container_width=True)
 
         st.subheader("4. Project Gantt Chart")
-        gantt_fig = create_gantt_chart(cpm_df, start_date=start_date)
-        st.plotly_chart(gantt_fig, use_container_width=True)
+        st.plotly_chart(
+            create_gantt_chart(cpm_df, start_date=start_date),
+            use_container_width=True,
+        )
