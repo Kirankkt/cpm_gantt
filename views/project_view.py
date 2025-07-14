@@ -74,6 +74,12 @@ def validate_predecessors(df: pd.DataFrame) -> None:
             f"exist in the table:\n• " + "\n• ".join(msgs)
         )
         st.stop()
+        
+def ensure_percent_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Add Percent Complete column if missing (default = 0)."""
+    if "Percent Complete" not in df.columns:
+        df["Percent Complete"] = 0
+    return df
 
 
 
